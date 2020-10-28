@@ -1,3 +1,7 @@
+# 忽略文件夹lstm_data 与 .json文件
 Sentiment_Analysis_LSTM/lstm_data/
 Cluster/Agu_comment.json
 Cluster/Agu_content.json
+Weibo_Data/
+Visualize_Analysis/result/*.pkl
+Sentiment_Analysis_ML/SVM/svm_data

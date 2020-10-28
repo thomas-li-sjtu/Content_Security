@@ -11,13 +11,13 @@
 
 需要以下文件：（部分文件太大看百度网盘的链接把）
 1. 打完情感正负标签的训练集数据，用来作为训练集训练LSTM的参数
-'../Sentiment_Analysis_LSTM/data/neg.xls'
-'../Sentiment_Analysis_LSTM/data/pos.xls'
+'../Sentiment-Analysis-master/data/neg.xls'
+'../Sentiment-Analysis-master/data/pos.xls'
 2. LSTM神经网络训练完得到的神经网络结构和权重参数
 '../lstm_data/lstm.yml'
 '../lstm_data/lstm.h5'
 3. 基于维基百科1.3G繁体中文转简体训练的词向量模型
-'../Sentiment_Analysis_LSTM/lstm_data/wiki.zh.text.bayes_model'
+'../Sentiment_Analysis_LSTM/lstm_data/wiki.zh.text.model'
 
 '''
 import yaml
@@ -43,16 +43,20 @@ np.random.seed(1337)  # For Reproducibility
 import jieba
 import csv
 import pandas as pd
+import seaborn as sns
 import sys
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+from sklearn import metrics
 sys.setrecursionlimit(1000000)
-# set parameters:
+# 超参数设置
 vocab_dim = 200
 maxlen = 200
-n_iterations = 1  # ideally more..
+n_iterations = 1
 n_exposures = 5
 window_size = 5
-batch_size = 32
-n_epoch = 4
+batch_size = 128
+n_epoch = 5
 input_length = 200
 cpu_count = multiprocessing.cpu_count()
 
@@ -61,21 +65,17 @@ cpu_count = multiprocessing.cpu_count()
 def loadfile():
     neg = pd.read_excel('../../Sentiment_Analysis_LSTM/data/neg.xls', header=None, index=None)
     pos = pd.read_excel('../../Sentiment_Analysis_LSTM/data/pos.xls', header=None, index=None)
-
     combined = np.concatenate((pos[0], neg[0]))
-    # print(combined)
-    # print(combined.shape)
     y = np.concatenate((np.ones(len(pos), dtype=int), np.zeros(len(neg), dtype=int)))
-
     return combined, y
 
 
 # 对句子经行分词，并去掉换行符
 def tokenizer(text):
-    """
+    '''
     :param text:  string
     :return:  [[tokenize1,tokenize2..]] list of list
-    """
+    '''
     text = [jieba.lcut(document.replace('\n', '')) for document in text]
     return text
 
@@ -83,22 +83,20 @@ def tokenizer(text):
 # 创建词语字典，并返回每个词语的索引，词向量，以及每个句子所对应的词语索引
 def create_dictionaries(model=None, combined=None):
     """
-        Function does are number of Jobs:
-        1- Creates a word to index mapping
-        2- Creates a word to vector mapping
-        3- Transforms the Training and Testing Dictionaries
+    创建词与索引的映射
+    创建词与词向量的映射
+    转换训练与测试的词语字典
     """
     if (combined is not None) and (model is not None):
         gensim_dict = Dictionary()
-        gensim_dict.doc2bow(model.wv.vocab,
-                            allow_update=True)
+        gensim_dict.doc2bow(model.wv.vocab, allow_update=True)
         w2indx = {v: k+1 for k, v in gensim_dict.items()}  # 所有频数超过10的词语的索引
         w2vec = {word: model[word] for word in w2indx.keys()}  # 所有频数超过10的词语的词向量
 
         def parse_dataset(combined):
-            '''
-            Words become integers
-            '''
+            """
+            单词转整型数字
+            """
             data = []
             for sentence in combined:
                 new_txt = []
@@ -119,7 +117,7 @@ def create_dictionaries(model=None, combined=None):
 
 # 创建词语字典，并返回每个词语的索引，词向量，以及每个句子所对应的词语索引
 def word2vec_train(combined):
-    model = Word2Vec.load('../../Sentiment_Analysis_LSTM/lstm_data/wiki.zh.text.bayes_model')
+    model = Word2Vec.load('../../Sentiment_Analysis_LSTM/lstm_data/wiki.zh.text.model')
     index_dict, word_vectors, combined = create_dictionaries(model=model, combined=combined)
     print("combined, word2vec_train")
     print(combined)
@@ -128,6 +126,7 @@ def word2vec_train(combined):
 
 
 def get_data(index_dict, word_vectors, combined, y):
+
     n_symbols = len(index_dict) + 1  # 所有单词的索引数，频数小于10的词语索引为0，所以加1
     embedding_weights = np.zeros((n_symbols, vocab_dim))  # 索引为0的词语，词向量全为0
     for word, index in index_dict.items():  # 从索引为1的词语开始，对每个词语对应其词向量
@@ -162,7 +161,25 @@ def train_lstm(n_symbols, embedding_weights, x_train, y_train, x_test, y_test):
 
     print("Evaluate...")
     score = model.evaluate(x_test, y_test, batch_size=batch_size)
+    y_pred = model.predict_classes(x_test, batch_size=batch_size)
+    print(y_pred)
+    print(y_test)
+    print("召回率: ", str(metrics.recall_score(y_test, y_pred, average='micro')))
+    print("精确率: ", str(metrics.precision_score(y_test, y_pred, average='micro')))
+    print("f1分: ", str(metrics.f1_score(y_test, y_pred, average='weighted')))
+    con_mat = confusion_matrix(y_test, y_pred)
+    con_mat_norm = con_mat.astype('float') / con_mat.sum(axis=1)[:, np.newaxis]  # 归一化
+    con_mat_norm = np.around(con_mat_norm, decimals=2)
 
+    # === plot ===
+    plt.figure(figsize=(8, 8))
+    sns.heatmap(con_mat_norm, annot=True, cmap='Blues')
+    plt.ylim(0, 10)
+    plt.xlabel('Predicted labels')
+    plt.ylabel('True labels')
+    plt.savefig("confusion_matrix.png")
+
+    # 保存模型
     yaml_string = model.to_yaml()
     with open('../lstm_data/lstm.yml', 'w') as outfile:
         outfile.write(yaml.dump(yaml_string, default_flow_style=True))
@@ -177,7 +194,7 @@ def train():
     print(len(combined), len(y))
     print('Tokenising...')
     combined = tokenizer(combined)
-    print('Training a Word2vec bayes_model...')
+    print('Training a Word2vec model...')
     index_dict, word_vectors, combined = word2vec_train(combined)
     print('Setting up Arrays for Keras Embedding Layer...')
     n_symbols, embedding_weights, x_train, y_train, x_test, y_test = get_data(index_dict, word_vectors, combined, y)
@@ -187,21 +204,14 @@ def train():
 
 def input_transform(string):
     words = jieba.lcut(string)
-    # print(words.shape)
     words = np.array(words).reshape(1, -1)
-    # print(words.shape)
-    model = Word2Vec.load('../../Sentiment_Analysis_LSTM/lstm_data/wiki.zh.text.bayes_model')
-    # 举例子，相近词
-
-    # for key in bayes_model.similar_by_word(u'日本', topn=10):
-    #     # if len(key[0]) == 3:  # key[0]应该就表示某个词
-    #     print(key[0], key[1])  # 某一个词,某一个词出现的概率
-
+    model = Word2Vec.load('../../Sentiment_Analysis_LSTM/lstm_data/wiki.zh.text.model')
     _, _, combined = create_dictionaries(model, words)
     return combined
 
+
 def lstm_predict(string):
-    print('loading bayes_model......')
+    print('loading model......')
     with open('../../Sentiment_Analysis_LSTM/lstm_data/lstm.yml', 'r') as f:
         yaml_string = yaml.load(f)
     model = model_from_yaml(yaml_string)
@@ -227,9 +237,7 @@ def lstm_predict(string):
 
 
 if __name__ == '__main__':
-
-    print(lstm_predict('牛逼的手机，从3米高的地方摔下去都没坏，质量非常好'))
-    #train()
+    train()
     #string = '电池充完了电连手机都打不开.简直烂的要命.真是金玉其外,败絮其中!连5号电池都不如'
     # string = '牛逼的手机，从3米高的地方摔下去都没坏，质量非常好'
     # string = '酒店的环境非常好，价格也便宜，值得推荐'
@@ -251,7 +259,7 @@ if __name__ == '__main__':
     # csv_write = csv.writer(out, dialect='excel')
     # stu1 = ['微博创建时间', '微博url', '点赞数', '转发数', '评论数', '工具', '关键词', '微博内容', '情感正负']
     # csv_write.writerow(stu1)
-
+    #
     # count = 1
     # for i in content_comment:
     #     print("处理到：", count)
@@ -271,3 +279,4 @@ if __name__ == '__main__':
     #     csv_write.writerow(senti)
 
     # train()
+

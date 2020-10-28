@@ -1,25 +1,24 @@
 """
-贝叶斯分类请问
+贝叶斯分类情感
 """
-
 import random
 import re
 import traceback
-
+import pickle
 import jieba
 import numpy as np
-from sklearn.externals import joblib
 from sklearn.naive_bayes import MultinomialNB
+import joblib
 
-jieba.load_userdict("train/word.txt")
-stop = [line.strip() for line in open('SVM/ad/stop.txt', 'r', encoding='utf-8').readlines()]  # 停用词
+jieba.load_userdict("train/user_dict.txt")
+stop = [line.strip() for line in open('SVM/svm_data/stop.txt', 'r', encoding='utf-8').readlines()]  # 停用词
 
 
 def build_key_word(path):  # 通过词频产生特征
     d = {}
     with open(path, encoding="utf-8") as fp:
         for line in fp:
-            for word in jieba.cut(line.strip()):
+            for word in jieba.cut(line[2:].strip()):
                 p = re.compile(r'\w', re.L)
                 result = p.sub("", word)
                 if not result or result == ' ':  # 空字符
@@ -29,6 +28,9 @@ def build_key_word(path):  # 通过词频产生特征
     kw_list = sorted(d, key=lambda x: d[x], reverse=True)
     size = int(len(kw_list) * 0.2)  # 取最前的30%
     mood = set(kw_list[:size])
+    file = open(".\\bayes_vocablist.pkl", "wb")
+    pickle.dump(list(mood - set(stop)), file)
+    print("vocab dump")
     return list(mood - set(stop))
 
 
@@ -142,36 +144,38 @@ def predict(test_word_array, test_word_arrayLabel, testCount, PosWords, NegWords
 
 if __name__ == '__main__':
     for m in range(1, 11):
-        vocabList = build_key_word("train/train.txt")
-        line_cut, label = loadDataSet("train/train.txt")
-        train_mood_array = setOfWordsListToVecTor(vocabList, line_cut)
+        vocabList = build_key_word("train/train_weibo.txt")
+        line_cut, label = loadDataSet("train/train_weibo.txt")
+        train_word_array = setOfWordsListToVecTor(vocabList, line_cut)
         test_word_array = []
         test_word_arrayLabel = []
-        testCount = 100  # 从中随机选取100条用来测试，并删除原来的位置
+
+        testCount = 1000  # 从中随机选取1000条用来测试，并从训练集中删除它们
         for i in range(testCount):
             try:
-                randomIndex = int(random.uniform(0, len(train_mood_array)))
+                randomIndex = int(random.uniform(0, len(train_word_array)))
                 test_word_arrayLabel.append(label[randomIndex])
-                test_word_array.append(train_mood_array[randomIndex])
-                del (train_mood_array[randomIndex])
+                test_word_array.append(train_word_array[randomIndex])
+                del (train_word_array[randomIndex])
                 del (label[randomIndex])
             except Exception as e:
                 print(e)
 
+        # 训练与测试  多项式贝叶斯
         multi = MultinomialNB()
-        multi = multi.fit(train_mood_array, label)
-        joblib.dump(multi, 'bayes_model/gnb.model')
-        muljob = joblib.load('bayes_model/gnb.model')
+        multi = multi.fit(train_word_array, label)
+        joblib.dump(multi, 'bayes_gnb.model')
+        muljob = joblib.load('bayes_gnb.model')
         result = muljob.predict(test_word_array)
         count = 0
         for i in range(len(test_word_array)):
             type = result[i]
             if type != test_word_arrayLabel[i]:
                 count = count + 1
-            # print(test_word_array[i], "----", result[i])
         print("mul", count / float(testCount))
-        PosWords, NegWords, NeutralWords, prior_Pos, prior_Neg, prior_Neutral = \
-            trainingNaiveBayes(train_mood_array, label)
 
+        # 训练与测试   朴素贝叶斯
+        PosWords, NegWords, NeutralWords, prior_Pos, prior_Neg, prior_Neutral = \
+            trainingNaiveBayes(train_word_array, label)
         predict(test_word_array, test_word_arrayLabel, testCount, PosWords, NegWords, NeutralWords, prior_Pos,
                 prior_Neg, prior_Neutral)

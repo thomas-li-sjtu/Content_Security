@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*
-'''
+"""
 匹配content、comment并初步清理数据
 用于作词云wc.py、地图graph.py、Tf-idf文本聚类cluster_tfidf、Word2Vec文本聚类cluster_w2v
 将每个分类关键词形式变为：
@@ -8,35 +8,31 @@
   [url2, content2原文, [content2分词],[comment1],...,[comment_m]],
   ...
 ]
-'''
+"""
 
 import codecs
-import json
-import pandas as pd
 import jieba
 import pickle
 import re
-from Cluster.langconv import *
+from Traditional_to_simplified.langconv import *
+
 
 def Traditional2Simplified(sentence):
-    '''
+    """
     将sentence中的繁体字转为简体字
     :param sentence: 待转换的句子
     :return: 将句子中繁体字转换为简体字之后的句子
-    '''
+    """
     sentence = Converter('zh-hans').convert(sentence)
     return sentence
 
+
 def Sent2Word(sentence):
-    """Turn a sentence into tokenized word list and remove stop-word
-
-    Using jieba to tokenize Chinese.
-
-    Args:
-        sentence: A string.
-
-    Returns:
-        words: A tokenized word list.
+    """
+    把一个句子切割为的单词表并删除停止词
+    用jieba切割单词
+    :param sentence: 待转换的句子
+    :return: 切割后的单词表
     """
     global stop_words
 
@@ -48,8 +44,7 @@ def Sent2Word(sentence):
 
 def Match(comment, content):
     """匹配微博内容和微博评论数据，并将明显的广告微博剔除
-
-    Args:
+    :param
         comment_example:
       [
       {'_id': 'C_4322161898716112', 'crawl_time': '2019-06-01 20:35:36', 'weibo_url': 'https://weibo.com/1896820725/H9inNf22b', 'comment_user_id': '6044625121', 'content': '没问题，', 'like_num': {'$numberInt': '0'}, 'created_at': '2018-12-28 11:19:21'},...
@@ -60,8 +55,8 @@ def Match(comment, content):
       {'_id': '1177737142_H4PSVeZWD', 'keyword': 'A股', 'crawl_time': '2019-06-01 20:31:13', 'weibo_url': 'https://weibo.com/1177737142/H4PSVeZWD', 'user_id': '1177737142', 'created_at': '2018-11-29 03:02:30', 'tool': 'Android', 'like_num': {'$numberInt': '0'}, 'repost_num': {'$numberInt': '0'}, 'comment_num': {'$numberInt': '0'}, 'image_url': 'http://wx4.sinaimg.cn/wap180/4632d7b6ly1fxod61wktyj20u00m8ahf.jpg', 'content': '#a股观点# 鲍威尔主席或是因为被特朗普总统点名批评后萌生悔改之意，今晚一番讲话被市场解读为美联储或暂停加息步伐。美元指数应声下挫，美股及金属贵金属价格大幅上扬，A50表现也并不逊色太多。对明天A股或有积极影响，反弹或能得以延续。 [组图共2张]'},...
       ]
 
-    Returns:
-        其实没有return，形成如下格式的pkl文件：
+    :return:
+        形成如下格式的pkl文件：
         [
         [url1, content1原文, [content1分词],[comment1],...,[comment_n]],
         [url2, content2原文, [content2分词],[comment1],...,[comment_m]],
@@ -75,6 +70,8 @@ def Match(comment, content):
         judge = []
         print('Processing train ', k)
         content[k]['content'] = Traditional2Simplified(content[k]['content'])
+
+        # 两种方式判断是不是广告
         for adv in advertisement:
             if adv in content[k]['content']:
                 judge.append("True")
@@ -82,12 +79,13 @@ def Match(comment, content):
         if re.search(r"买.*赠.*", content[k]['content']):
             judge.append("True")
             continue
-        # 通过上面的两种模式判断是不是广告
+
         if "True" not in judge:
             comment_list = []
             url = content[k]['weibo_url']
             comment_list.append(url)
             comment_list.append(content[k]['content'])
+
             # 数据清洗
             a2 = re.compile(r'#.*?#')
             content[k]['content'] = a2.sub('', content[k]['content'])
@@ -118,14 +116,13 @@ def Match(comment, content):
 if __name__ == '__main__':
 
     print("停用词读取")
-    stop_words = [w.strip() for w in open('./dict/哈工大停用词表.txt', 'r', encoding='UTF-8').readlines()]
+    stop_words = [w.strip() for w in open('../dict/哈工大停用词表.txt', 'r', encoding='UTF-8').readlines()]
     stop_words.extend(['\n', '\t', ' ', '回复', '转发微博', '转发', '微博', '秒拍', '秒拍视频', '视频', "王者荣耀", "王者", "荣耀"])
     for i in range(128000, 128722 + 1):
         stop_words.extend(chr(i))
     stop_words.extend(['A股'])
 
     # 特殊字符
-
     # print(ord("🐏"))
     # print(chr(77823))
     # print(hex(128300))
@@ -140,7 +137,7 @@ if __name__ == '__main__':
     #     else:
     #         break
 
-    #  json文档读法
+    #  json文档读入
     print("comment读取")
     f = codecs.open('./Agu_comment.json', 'r', 'UTF-8-sig')
     comment = []
@@ -152,7 +149,6 @@ if __name__ == '__main__':
     # comment = [json.loads(i) for i in f.readlines()]  # json.loads也行
     f.close()
     # print(comment)
-
     '''
       comment_example:
       [
@@ -175,7 +171,6 @@ if __name__ == '__main__':
     # jinkou = [json.loads(i) for i in f.readlines()]  # json.loads也行
     f.close()
     # print(content)
-
     '''
       content_example:
       [
@@ -183,6 +178,6 @@ if __name__ == '__main__':
       ]
     '''
 
-    Match(comment, content)
+    Match(comment, content)  # 匹配
 
 

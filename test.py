@@ -1,11 +1,8 @@
-# !/usr/bin/env python3
-# -*- coding utf-8 -*-
-# @TIME： 2020/10/20   12:45
-# @FILE： test.py
-# @IDE ： PyCharm
-# @contact: 980226547@qq.com
-import re
+import pickle
 
-p = re.compile(r'\w')
-result = p.sub(r"\w", "abc")
-print(result)
+
+
+f = pickle.load(open(".\\Weibo_Data\\origin_data\\trump-content.pkl", "rb"))
+file = open(".\\Weibo_Data\\origin_data\\trump_content.txt", "w", encoding="utf-8")
+for i in f:
+    file.write(i + "\n")

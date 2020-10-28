@@ -5,19 +5,24 @@ SVM分类广告和正常文本
 
 import pynlpir
 import re
+import pickle
 from nltk.classify.scikitlearn import SklearnClassifier
 from sklearn.svm import SVC, LinearSVC, libsvm, liblinear
-from sklearn.naive_bayes import MultinomialNB, BernoulliNB
-from sklearn.linear_model import LogisticRegression
 from random import shuffle
 from nltk.probability import FreqDist, ConditionalFreqDist
 from nltk.metrics import BigramAssocMeasures
+import joblib
 
 pynlpir.open()
-stop = [line.strip() for line in open('ad/stop.txt', 'r', encoding='utf-8').readlines()]  # 停用词
+stop = [line.strip() for line in open('svm_data/stop.txt', 'r', encoding='utf-8').readlines()]  # 停用词
 
 
 def read_file(filename):
+    """
+    读取文件，删除URL
+    :param filename:
+    :return:
+    """
     f = open(filename, 'r', encoding='utf-8')
     line = f.readline()
     str = []
@@ -40,12 +45,13 @@ def read_file(filename):
 def pynlpir_feature(number):  # 选取number个特征词
     normalWords = []
     advWords = []
-    for items in read_file('ad/normal.txt'):  # 把集合的集合变成集合
+    for items in read_file('svm_data/normal.txt'):  # 把集合的集合变成集合
         for item in items:
             normalWords.append(item)
-    for items in read_file('ad/advertise.txt'):
+    for items in read_file('svm_data/advertise.txt'):
         for item in items:
             advWords.append(item)
+
     word_fd = FreqDist()  # 可统计所有词的词频
     cond_word_fd = ConditionalFreqDist()  # 可统计正常文本中的词频和广告文本中的词频
     for word in normalWords:
@@ -54,6 +60,7 @@ def pynlpir_feature(number):  # 选取number个特征词
     for word in advWords:
         word_fd[word] += 1
         cond_word_fd['adv'][word] += 1
+
     normal_word_count = cond_word_fd['normal'].N()  # 正常词的数量
     adv_word_count = cond_word_fd['adv'].N()  # 广告词的数量
     total_word_count = normal_word_count + adv_word_count
@@ -85,17 +92,22 @@ def build_features():
     为文本打标签：广告文本和正常文本
     :return:
     """
-    feature = pynlpir_feature(600)  # pynlpir分词
+    feature = pynlpir_feature(500)  # pynlpir获得300个特征词
+    print(type(feature))
+    # 文件存储
+    feature_store = open('pynlpir_feature', 'wb')
+    pickle.dump(feature, feature_store)
+
     normalFeatures = []
-    for items in read_file('ad/normal.txt'):
+    for items in read_file('svm_data/normal.txt'):
         a = {}
         for item in items:
-            if item in feature.keys():
+            if item in feature.keys():  # 如果当前分词是特征词，则添加标签 true
                 a[item] = 'True'
         normalWords = [a, 'normal']  # 为正常文本赋予"normal"
         normalFeatures.append(normalWords)
     advFeatures = []
-    for items in read_file('ad/advertise.txt'):
+    for items in read_file('svm_data/advertise.txt'):
         a = {}
         for item in items:
             if item in feature.keys():
@@ -120,9 +132,18 @@ def traintest(string):
 
 
 def score(classifier, train, test):
+    """
+    训练分类器
+    :param classifier:
+    :param train:
+    :param test:
+    :return:
+    """
     classifier = SklearnClassifier(classifier)  # 在nltk中使用scikit-learn的接口
     classifier.train(train)  # 训练分类器
-    pred = classifier.classify_many(test)  # 对测试集的数据进行分类，给出预测的标签
+    joblib.dump(classifier, 'svm.model')
+    svm = joblib.load('svm.model')
+    pred = svm.classify_many(test)  # 对测试集的数据进行分类，给出预测的标签
     n = 0
     s = len(pred)
     for i in range(0, s):
@@ -142,9 +163,6 @@ if __name__ == '__main__':
         train = normalFeatures[80:] + advFeatures[80:]  # 训练集(后80条)
         for_test = normalFeatures[:80] + advFeatures[:80]  # 预测集(验证集)(前面80条)
         test, tag = zip(*for_test)  # 分离测试集合的数据和标签，便于验证和测试
-        # print('BernoulliNB`s accuracy is %f' % score(BernoulliNB()))
-        # print('MultinomiaNB`s accuracy is %f' % score(MultinomialNB()))
-        # print('LogisticRegression`s accuracy is  %f' % score(LogisticRegression()))
         # print('SVC`s accuracy is %f' % score(SVC()))
         classifier, temp = score(LinearSVC(), train, test)
         avg = temp + avg
